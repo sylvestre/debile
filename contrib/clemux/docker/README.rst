@@ -39,6 +39,9 @@ Building images
 debile-data
 ~~~~~~~~~~~
 
+This container will store debile-master's data: settings, upload queue, result
+of build/QA checks jobs.
+
 This needs a tarball ``master-keys.tar.gz`` containing the PGP keys
 for the master.  You can use this script:
 
@@ -73,7 +76,10 @@ http://www.mux.me/debile/python-firewoes_0.2+mux_all.deb
 Or build it from https://github.com/clemux/firewoes, branch
 ``iterative_uniquify``.
 
-Edit ``debile.yaml``.
+Edit ``debile.yaml``, section ``Users``. You can ignore all SSL fields.
+
+The most important setting to change is the ``pgp`` field: it should contain the
+fingerprint of the pgp key you will use to sign packages.
 
 Then you can build the image:
 
@@ -82,6 +88,13 @@ Then you can build the image:
 debile-http
 ~~~~~~~~~~~
 
+This container provides a nginx server for:
+
+- accessing the repository of packages built by debile
+  
+- providing a WebDAV access to the UploadQueue, for use with dput and its http
+  upload method.
+
 This should be straightforward. Systemd unit file also provided.
 
  $ docker build -t clemux/debile-http .
@@ -89,12 +102,17 @@ This should be straightforward. Systemd unit file also provided.
 debile-pg
 ~~~~~~~~~
 
+This container provides a postgresql server for use by debile-master.
+
 Same here:
 
  $ docker build -t clemux/debile-pg .
 
 debile-slave
 ~~~~~~~~~~~~
+
+This container provides an instance of debile-slave, which will connect to
+debile-master and receive jobs (build or QA checks).
 
 This requires ``debile-slave_1.3.2_all.deb`` and ``python-debile_1.3.2_all.deb``.
 
@@ -131,7 +149,12 @@ First you will need to run postgresql. If you're using systemd:
 
 Otherwise:
 
- $ docker run -d --name debile-pg -p 5432:5432 clemux/debile-pg
+  $ docker run -d --name debile-pg -p 5432:5432 clemux/debile-pg
+
+Note: this will expose the container's port 5432 to the host. If you want to
+expose that port on some other port of the host, the syntax is:
+
+  -p HOSTPORT:CONTAINERPORT
 
 Initializing debile-master
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -178,9 +201,37 @@ With systemd:
 
 Otherwise:
 
- $ docker run -d --name debile-http --volumes-from debile-data -v /var/log/nginx -p 80:80 clemux/debile-http
+  $ docker run -d --name debile-http --volumes-from debile-data -v /var/log/nginx -p 80:80 clemux/debile-http
+
+As for the postgres container, you can change the host port which will point to the container's nginx server, for example:
+
+  -p 8080:80
+
+will expose the ngix port on the host as 8080. 
 
 Running debile-slave
 --------------------
 
  $ docker run --name debile-slave --link debile-master:debile-master --link debile-http:debile-http clemux/debile-slave
+
+Tip: If you get an authentication failure similar to this:
+
+      <Slave ip address> - - [11/Aug/2015 05:46:28] code 401, message Authentication failed
+      
+update the IP address of debile-slave in the builders table of the
+Postgres debile database. To do that, run on the host:
+
+ $ docker inspect debile-slave | grep IPAddress
+
+Note down the IP address. For example, it can be 172.17.0.177.
+
+Then connect to the database from the host:
+
+ $ psql -h localhost -U debile -d debile -W
+
+The password is 'debile', as above.
+
+Finally, assuming there is only one debile-slave and its IP address is
+172.17.0.177, update the builders table as follows:
+
+ debile=> UPDATE builders SET ip='172.17.0.177' WHERE id=1;
