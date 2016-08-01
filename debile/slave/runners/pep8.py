@@ -28,6 +28,12 @@ def pep8(dsc, analysis):
     run_command(["dpkg-source", "-x", dsc, "source-pep8"])
     with cd('source-pep8'):
         out, _, ret = run_command(['pep8', '.'])
+        print dsc
+        print "out : "
+        print out
+        print "ret : "
+        print ret
+
         failed = ret != 0
 
         for issue in parse_pep8(out.splitlines()):
