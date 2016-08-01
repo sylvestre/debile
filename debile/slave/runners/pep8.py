@@ -35,9 +35,11 @@ def pep8(dsc, analysis):
         print ret
 
         failed = ret != 0
-
-        for issue in parse_pep8(out.splitlines()):
-            analysis.results.append(issue)
+        if out is not None:
+                for issue in parse_pep8(out.splitlines()):
+                    analysis.results.append(issue)
+        else:
+            print "Output of pep8 checker command is None!"
 
         return (analysis, out, failed, None, None)
 
